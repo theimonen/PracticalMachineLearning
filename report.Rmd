@@ -1,0 +1,96 @@
+---
+title: "Practical Machine Learning Assignment"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+```{r echo=FALSE,warning=FALSE}
+setwd("/Users/tomi/Opiskelu/Kurssit/MOOC/Coursera - Practical Machine Learning/")
+load("pml.Rda")
+library(printr)
+
+```
+
+## Introduction
+
+I used the classification model building approach for **caret** described by Kuhn in his article[^1]. The process consist of data preparation, building and tuning the model using the **train** function, predicting new samples using the **predict** function, and characterizing model performance using the **confusionMatrix** function.
+
+## Data preparation
+As a first step in processing the the data set, I removed all of the non-numerical variables and variables with very few values. This resulted in a data frame with 52 predictor variables and the outcome variable (classe).  
+
+Subsequently, I split the training data into a training set (70% of values) and test set (30% of values) using the createDataPartition function.
+```{r eval=FALSE}
+set.seed(400)
+inTrain <- createDataPartition(y=pml.training.cleaned$classe, p=0.7, list=F)
+training <- pm.training.training[inTrain,]
+testing <- pml.training.cleaned[-inTrain,]
+```
+Finally, I removed variables with high correlation in the training set (following the example by Kuhn) from the training and testing set, as these would not significantly contribute to the classification. 
+```{r eval=FALSE}
+descrCorr <- cor(training[,-53])
+highCorr <- findCorrelation(descrCorr, 0.90)
+training <- training[,-highCorr]
+testing <- testing[,-highCorr]
+```
+This resulted in the final predictor set containing 45 variables.
+```{r echo=FALSE}
+columnNames
+```
+
+## Model building
+
+Based on the analysis by Fernández-Delgado et al.[^2] and the video lectures, I decided to use a random forest classifier (model '**rf**' in caret). I used 10-fold cross-validation to evaluate and select the optimal model based on accuracy. The default value of 500 trees was used. I chose a relatively low *tuneLength* to keep the computation time reasonable. Even when utilizing two cores (via **doParallel**), computing the model took several hours on a 2.6 GHz Intel Core i5.
+
+```{r eval=FALSE}
+rfFit <- train(classe ~ .,data=training,trControl=trainControl(method="cv",number=10),
+               tuneLength=5)
+```
+
+Table 1 shows the resampling results across tuning parameters. The final model utilizes mtry value of 12.
+```{r echo=FALSE}
+knitr::kable(rfModel, digits=3,caption="_Table 1._ Resampling results")
+```
+
+The final model estimates an out-of-bag error rate of 0.58%. OOB error is estimated during the training by bootstrapping from the training set and it should provide an unbiased estimate of out-of-sample error[^3].
+
+## Prediction accuracy
+Prediction performance was validated against the test set.
+```{r eval=FALSE}
+rfPredict <- predict(rfFit, newdata=testing)
+rfPerformance <- confusionMatrix(rfPredict,testing$classe)
+```
+ The overall accuracy of the model was 99.5% (κ = 0.99), with balanced accuracy ranging between 99.4% and 99.9% by class (Table 2). 
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+knitr::kable(t(rfPerformance$byClass),digits=3,caption="_Table 2._ Statistics by class")
+
+```
+
+## Model comparison
+For comparison purposes I also trained a k-Nearest Neighbor classifier using the same train and test sets. The primary purpose for this exercise was to if comparable performance to random forests could be reached with a computationally less complex model.  
+
+Training and test sets were pre-processed (centered and scaled) prior to training in order to improve accuracy. 
+```{r eval=FALSE}
+knnFit <- train(classe ~ .,data=training.knn,trControl=trainControl(method="cv",number=10),
+                tuneLength=10)
+```
+The overall accuracy of the 5-nearest neighbor classifier was 96.4% (κ = 0.95) when predicting against the test set, with balanced accuracy ranging between 96.2% and 98.9% by class. 
+
+The estimated difference in accuracy between the classifiers is statistically significant, _t_(9) = 12.764, _p_ < 0.001. The models were compared using the **resamples** and **diff** functions, as per the caret documentation[^4].
+
+```{r eval=FALSE}
+resamps <- resamples(list(RF = rfFit, kNN = knnFit))
+difs <- diff(resamps)
+```
+
+In practice this difference was also visible when applying the classifiers against the 20 problem instances in the course programming assignment. The random forest model correctly predicted the class of each of the instances while the k-Nearest Neighbor model misclassified problem 3.
+
+##Conclusion
+As was suggested in machine learning literature and in the course slides, random forest models provide extremely good classification results with little need for manual tuning.
+
+[^1]:Kuhn, M.: Building Predictive Models in R Using the caret package. Journal of Statistical Software 28(5), November 2008. http://www.jstatsoft.org/v28/i05/paper
+[^2]:Fernández-Delgado, M., Cernadas, E., Barro, S., Amorim, D.: Do we Need Hundreds of Classifiers to Solve Real World Classification Problems? Journal of Machile Learning Research 15, October, 3133-3181 (2014). http://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf
+[^3]:Breiman, L., Cutler, A.: Random Forests. http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr
+[^4]:http://topepo.github.io/caret/training.html
