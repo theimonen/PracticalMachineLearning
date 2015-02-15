@@ -16,16 +16,18 @@ library(printr)
 
 ## Introduction
 
-In this assignment I used R version 3.1.2 and **caret** version 6.0-41. I followed the classification model building approach described by the author of the caret package[^1]. The process consisted of data preparation, building and tuning the model using the *train* function, predicting new samples using the *predict* function, and characterizing model performance using the *confusionMatrix* function.
+In this assignment I used **R** version 3.1.2 and **caret** version 6.0-41. I followed the classification model building approach described by the author of the caret package[^1]. The process consisted of data preparation, building and tuning the model using the *train* function, predicting new samples using the *predict* function, and characterizing model performance using the *confusionMatrix* function. Finally, I compared the model to two other supervised learning models.
 
 ## Data preparation
-As a first step in processing the the data set, I removed all of the non-numerical variables and variables with very few values. This resulted in a data frame with 52 predictor variables and the outcome variable (classe).  
+As a first step in processing the the data set, I removed non-numerical variables (e.g., timestamps, participant names) and variables with a significant amount of missing values. This resulted in a data frame with 52 predictor variables and the outcome variable (classe).  
 
 ```{r echo=FALSE}
 columnNames
 ```
 
-Subsequently, I split the training data into a training set (70% of values) and a test set (30% of values) using the createDataPartition function. This resulted in 13737 observations in the training set and 5885 observations in the test set.
+It would have been possible to further reduce the number of predictor variables by using principal component analysis (via *preProcess*) or by removing highly correlated predictors. However, the former would have made the model even harder to interpret. It is also suggested in the literature[^2] that random forests are capable of dealing with correlated variables.
+
+Subsequently, I split the processed data set into a training set (70% of values) and a test set (30% of values) using the *createDataPartition function*. This resulted in 13737 observations in the training set and 5885 observations in the test set.
 
 ```{r eval=FALSE}
 set.seed(400)
@@ -36,9 +38,9 @@ testing <- pml.training.cleaned[-inTrain,]
 
 ## Model building
 
-Based on the analysis by Fernández-Delgado et al.[^2] and the video lectures, I decided to use a random forest classifier (model **rf** in caret, provided by the **randomForest** package version 4.6-10). 
+Based on the performance analysis by Fernández-Delgado et al.[^3] and the course materials, I decided to use  random forests (model **rf** in caret, provided by the **randomForest** package version 4.6-10) since they have been found to work well with real-life data sets.
 
-I used 10-fold cross-validation with 3 repeats to tune the model parameters and select the optimal model based on accuracy. Using 3 repeats should help reduce variance in the resampling estimates[^3]. The default value of 500 trees was used. 
+I used 10-fold cross-validation with 3 repeats to tune the model parameters and select the optimal model based on accuracy. Using 3 repeats was aimed at helping reduce variance in the resampling estimates[^4]. The default value of 500 trees was used. 
 
 I chose a relatively low *tuneLength* of 5 to keep the computation time reasonable. Even when utilizing three cores via the **doParallel** package (1.0.8), computing the model took 1 hour 15 minutes on a 2.6 GHz Intel Core i5.
 
@@ -49,57 +51,59 @@ rfFit <- train(classe ~ .,data=training, method="rf",
                trControl=trainControl(method="repeatedcv", number=10, repeats=3), tuneLength=5)
 ```
 
-Table 1 shows the resampling results across tuning parameters. The final model utilizes *mtry* value of 14 (i.e., number of predictors randomly sampled for splitting at each node).
+Table 1 shows the resampling results across tuning parameters. The final model utilizes *mtry* value of 14, i.e., the number of predictors randomly selected for splitting at each tree node.
 ```{r echo=FALSE}
 knitr::kable(rfModel, digits=3,caption="_Table 1._ Resampling results")
 ```
 
-The final model estimates an out-of-bag error rate of 0.59%. OOB error is estimated during the training by bootstrapping from the training set and it should provide an unbiased estimate of out-of-sample error[^4]. The class error rate ranged from < 0.1% (class A) to ~1% (classes B, D).
+The best fitting model estimates an out-of-bag error rate of 0.59%. OOB error is estimated during the training by bootstrapping from the training set and it should provide an unbiased estimate of out-of-sample error[^5].
 
 ## Performance
-The classification performance of the random forest model was used to predict the classes in the test set as follows:
+The classification performance of the fitted model was used to predict the classes in the test set as follows:
 ```{r eval=FALSE}
 rfPredict <- predict(rfFit, newdata=testing)
 rfPerformance <- confusionMatrix(rfPredict,testing$classe)
 ```
 
-The overall accuracy of the model was 99.4% (κ = 0.99), which is contingent with the model's estimated OOB error. Balanced accuracy ranged between 99.3% and 99.9% by class (Table 2). 
+The overall accuracy of the model was 99.4% (κ = 0.99), which is contingent with the estimated OOB error (Table 2). 
 ```{r echo=FALSE,warning=FALSE,message=FALSE}
-knitr::kable(t(rfPerformance$byClass),digits=3,caption="_Table 2._ Statistics by class")
+knitr::kable(t(rfPerformance$table),digits=3,caption="_Table 2._ Confusion matrix of predicted and observed classes")
 
 ```
 
 ## Model comparison
-For comparison purposes I also trained a support vector machine (SVM) classifier and a k-Nearest neighbor classifiers using the same training and test sets. My primary goals was to examine if comparable performance to random forests could be reached with a computationally less demanding models.  
+For comparison purposes, I also trained a support vector machine (SVM) model and a k-nearest neighbor model using the same training and test set split. My primary goal was to examine if comparable performance to random forests could be reached with computationally less demanding models.  
 
-Training and test sets were pre-processed (centered and scaled) prior to training in order to improve accuracy. I used the radial basis function kernel (RBF) model **svmRadial**, provided by **kernlab** (0.9-20) to train the SVM classifier and the **knn** model from **e1071** (1.6-4).
+The training and test sets were pre-processed (centered and scaled) prior to model training. I used the radial basis function kernel (RBF) model **svmRadial**, provided by **kernlab** (0.9-20) to train the SVM model and the **knn** model from **e1071** (1.6-4).
 
-Similarly to the random forest model, I used 10-fold cross-validation with 3 repeats to tune the SVM *cost* parameter (i.e., level of trade-off between training error and complexity of the model) and the k-NN *k* parameter (i.e., number of neighbors). The training time was approximately 40 minutes for the SVM model and 10 minutes for the k-NN model using the same multicore configuration as the random forest model.
+I used 10-fold cross-validation with 3 repeats to tune the SVM *cost* parameter (level of trade-off between training error and complexity of the model) and the *k* parameter (number of neighbors) for the kNN model. The training time was approximately 40 minutes for the SVM model and 10 minutes for the kNN model using the same multicore configuration as before. The same seed (400) was used each time to ensure that the resampling results would be comparable between the models. In both cases the best model was selected based on accuracy.
+
 ```{r eval=FALSE}
 svmFit <- train(classe ~ .,data=training.processed,method="svmRadial",
                 trControl=trainControl(method="repeatedcv",number=10,repeats=3),tuneLength=10)
 knnFit <- train(classe ~.,data=training.processed,method="knn",
                 trControl=trainControl(method="repeatedcv",number=10,repeats=3),tuneLength=10)
 ```
-The best SVM model uses 2999 support vectors and has a cost of 128, with a training error of 0.15%. The resampled overall accuracy is 99.2% (κ = 0.99). When predicted on the test set, the overall accuracy of the model was 99.3% (κ = 0.99), with balanced accuracy ranging between 98.8% and 99.9% by class. 
+The best SVM model uses 2999 support vectors and has a cost of 128. The resampled overall accuracy is 99.2% (κ = 0.99). When predicted on the test set, the overall accuracy of the model was 99.3% (κ = 0.99). 
 
-The best k-nearest neighbor model uses 5 neighbours. The resampled overall accuracy is 96.0% (κ = 0.95). When predicting on the test set, the overall accuracy was 96.4% (κ = 0.95). The balanced accuracy ranged from 96.9% to 98.5%.
+The best k-nearest neighbor model uses 5 neighbours. The resampled overall accuracy is 96.0% (κ = 0.95). When predicting on the test set, the overall accuracy was 96.4% (κ = 0.95).
 
-The models were compared using the *resamples* and *diff* functions, as per the caret documentation[^5]. The difference between SVM and random forest was not statistically significant, however k-nearest neighbour was worse than both.
+The three models were compared using the *resamples* and *diff* functions, as per the caret documentation[^6]. The difference between SVM and random forest was not statistically significant, however k-nearest neighbour was worse than both.
 
 ```{r eval=FALSE}
 resamps <- resamples(list(KNN = knnFit, RF = rfFit, SVM = svmFit))
 difs <- diff(resamps)
 ```
 
-When predicting on the "unseen" data provided as the programming assignment problems, all of the classifiers worked as could be expected. Neither SVM or random forest produced any misclassifications while the k-nearest neighbor model predicted problem 3 incorrectly.
+When predicting on the "unseen" data provided as the programming assignment problems, all of the classifiers worked as one might expect based on the accuracy levels. The random forest and SVM models did not produce any incorrect predictions while the k-nearest neighbor model predicted one problem incorrectly.
 
 ##Conclusion
-All of the classifier models produce excellent classification results with little need for manual tuning. In practical terms, k-nearest neighbor is the fastest to compute seems less accurate than the others. SVM appears to be faster to compute than random forest even if the number of levels for the tuning parameter is increased. Compared to SVN, random forest may have advantages in support for automatic feature selection and robustness to predictor noise (Kuhn and Johnson, p. 550[^6]).
+All of the models that I experimented with produced excellent classification results with little need for manual tuning. In practical terms, k-nearest neighbors is the fastest to compute but seems slightly less accurate than the other models. SVM appears to be faster to compute than random forests even if the number of levels for the tuning parameter is increased. Compared to SVM, random forest may have advantages in support for automatic feature selection and robustness to predictor noise (Kuhn and Johnson, p. 550[^7]).
 
 [^1]:Kuhn, M.: Building Predictive Models in R Using the caret package. Journal of Statistical Software 28(5), November 2008. http://www.jstatsoft.org/v28/i05/paper
-[^2]:Fernández-Delgado, M., Cernadas, E., Barro, S., Amorim, D.: Do we Need Hundreds of Classifiers to Solve Real World Classification Problems? Journal of Machile Learning Research 15, October, 3133-3181 (2014). http://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf
-[^3]:Kuhn, M.: [Comparing Different Species of Cross-Validation](http://appliedpredictivemodeling.com/blog/2014/11/27/vpuig01pqbklmi72b8lcl3ij5hj2qm)
-[^4]:Breiman, L., Cutler, A.: Random Forests. http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr
-[^5]:http://topepo.github.io/caret/training.html
-[^6]:Kuhn, M., Johnson, K.: Applied Predictive Modeling. Springer, New York (2013)
+[^2]:Strobl, C., Boulesteix, A.-L., Kneib, T., Augustin, T., Zeileis, A.: Conditional variable importance for random forests. BMC Bioinformatics 9, 307 (2008). [http://dx.doi.org/10.1186%2F1471-2105-9-307](http://dx.doi.org/10.1186%2F1471-2105-9-307)
+[^3]:Fernández-Delgado, M., Cernadas, E., Barro, S., Amorim, D.: Do we Need Hundreds of Classifiers to Solve Real World Classification Problems? Journal of Machile Learning Research 15, October, 3133-3181 (2014). http://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf
+[^4]:Kuhn, M.: [Comparing Different Species of Cross-Validation](http://appliedpredictivemodeling.com/blog/2014/11/27/vpuig01pqbklmi72b8lcl3ij5hj2qm)
+[^5]:Breiman, L., Cutler, A.: Random Forests. http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr
+[^6]:The caret Package: Model Training and Tuning. [http://topepo.github.io/caret/training.html](http://topepo.github.io/caret/training.html)
+[^7]:Kuhn, M., Johnson, K.: Applied Predictive Modeling. Springer, New York (2013) [http://appliedpredictivemodeling.com/](http://appliedpredictivemodeling.com/)

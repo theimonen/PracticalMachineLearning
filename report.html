@@ -9,7 +9,7 @@
 <meta name="generator" content="pandoc" />
 
 
-<meta name="date" content="2015-02-13" />
+<meta name="date" content="2015-02-15" />
 
 <title>Practical Machine Learning Assignment</title>
 
@@ -52,17 +52,17 @@ code > span.er { color: #ff0000; font-weight: bold; }
 
 <div id="header">
 <h1 class="title">Practical Machine Learning Assignment</h1>
-<h4 class="date"><em>2015-02-13</em></h4>
+<h4 class="date"><em>2015-02-15</em></h4>
 </div>
 
 
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
-<p>In this assignment I used R version 3.1.2 and <strong>caret</strong> version 6.0-41. I followed the classification model building approach described by the author of the caret package<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>. The process consisted of data preparation, building and tuning the model using the <em>train</em> function, predicting new samples using the <em>predict</em> function, and characterizing model performance using the <em>confusionMatrix</em> function.</p>
+<p>In this assignment I used <strong>R</strong> version 3.1.2 and <strong>caret</strong> version 6.0-41. I followed the classification model building approach described by the author of the caret package<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>. The process consisted of data preparation, building and tuning the model using the <em>train</em> function, predicting new samples using the <em>predict</em> function, and characterizing model performance using the <em>confusionMatrix</em> function. Finally, I compared the model to two other supervised learning models.</p>
 </div>
 <div id="data-preparation" class="section level2">
 <h2>Data preparation</h2>
-<p>As a first step in processing the the data set, I removed all of the non-numerical variables and variables with very few values. This resulted in a data frame with 52 predictor variables and the outcome variable (classe).</p>
+<p>As a first step in processing the the data set, I removed non-numerical variables (e.g., timestamps, participant names) and variables with a significant amount of missing values. This resulted in a data frame with 52 predictor variables and the outcome variable (classe).</p>
 <pre><code>##  [1] &quot;roll_belt&quot;            &quot;pitch_belt&quot;           &quot;yaw_belt&quot;            
 ##  [4] &quot;total_accel_belt&quot;     &quot;gyros_belt_x&quot;         &quot;gyros_belt_y&quot;        
 ##  [7] &quot;gyros_belt_z&quot;         &quot;accel_belt_x&quot;         &quot;accel_belt_y&quot;        
@@ -81,7 +81,8 @@ code > span.er { color: #ff0000; font-weight: bold; }
 ## [46] &quot;gyros_forearm_z&quot;      &quot;accel_forearm_x&quot;      &quot;accel_forearm_y&quot;     
 ## [49] &quot;accel_forearm_z&quot;      &quot;magnet_forearm_x&quot;     &quot;magnet_forearm_y&quot;    
 ## [52] &quot;magnet_forearm_z&quot;</code></pre>
-<p>Subsequently, I split the training data into a training set (70% of values) and a test set (30% of values) using the createDataPartition function. This resulted in 13737 observations in the training set and 5885 observations in the test set.</p>
+<p>It would have been possible to further reduce the number of predictor variables by using principal component analysis (via <em>preProcess</em>) or by removing highly correlated predictors. However, the former would have made the model even harder to interpret. It is also suggested in the literature<a href="#fn2" class="footnoteRef" id="fnref2"><sup>2</sup></a> that random forests are capable of dealing with correlated variables.</p>
+<p>Subsequently, I split the processed data set into a training set (70% of values) and a test set (30% of values) using the <em>createDataPartition function</em>. This resulted in 13737 observations in the training set and 5885 observations in the test set.</p>
 <pre class="sourceCode r"><code class="sourceCode r"><span class="kw">set.seed</span>(<span class="dv">400</span>)
 inTrain &lt;-<span class="st"> </span><span class="kw">createDataPartition</span>(<span class="dt">y=</span>pml.training.cleaned$classe, <span class="dt">p=</span><span class="fl">0.7</span>, <span class="dt">list=</span>F)
 training &lt;-<span class="st"> </span>pml.training.cleaned[inTrain,]
@@ -89,14 +90,14 @@ testing &lt;-<span class="st"> </span>pml.training.cleaned[-inTrain,]</code></pr
 </div>
 <div id="model-building" class="section level2">
 <h2>Model building</h2>
-<p>Based on the analysis by Fernández-Delgado et al.<a href="#fn2" class="footnoteRef" id="fnref2"><sup>2</sup></a> and the video lectures, I decided to use a random forest classifier (model <strong>rf</strong> in caret, provided by the <strong>randomForest</strong> package version 4.6-10).</p>
-<p>I used 10-fold cross-validation with 3 repeats to tune the model parameters and select the optimal model based on accuracy. Using 3 repeats should help reduce variance in the resampling estimates<a href="#fn3" class="footnoteRef" id="fnref3"><sup>3</sup></a>. The default value of 500 trees was used.</p>
+<p>Based on the performance analysis by Fernández-Delgado et al.<a href="#fn3" class="footnoteRef" id="fnref3"><sup>3</sup></a> and the course materials, I decided to use random forests (model <strong>rf</strong> in caret, provided by the <strong>randomForest</strong> package version 4.6-10) since they have been found to work well with real-life data sets.</p>
+<p>I used 10-fold cross-validation with 3 repeats to tune the model parameters and select the optimal model based on accuracy. Using 3 repeats was aimed at helping reduce variance in the resampling estimates<a href="#fn4" class="footnoteRef" id="fnref4"><sup>4</sup></a>. The default value of 500 trees was used.</p>
 <p>I chose a relatively low <em>tuneLength</em> of 5 to keep the computation time reasonable. Even when utilizing three cores via the <strong>doParallel</strong> package (1.0.8), computing the model took 1 hour 15 minutes on a 2.6 GHz Intel Core i5.</p>
 <pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(doParallel)
 <span class="kw">registerDoParallel</span>(<span class="dv">3</span>)
 rfFit &lt;-<span class="st"> </span><span class="kw">train</span>(classe ~<span class="st"> </span>.,<span class="dt">data=</span>training, <span class="dt">method=</span><span class="st">&quot;rf&quot;</span>,
                <span class="dt">trControl=</span><span class="kw">trainControl</span>(<span class="dt">method=</span><span class="st">&quot;repeatedcv&quot;</span>, <span class="dt">number=</span><span class="dv">10</span>, <span class="dt">repeats=</span><span class="dv">3</span>), <span class="dt">tuneLength=</span><span class="dv">5</span>)</code></pre>
-<p>Table 1 shows the resampling results across tuning parameters. The final model utilizes <em>mtry</em> value of 14 (i.e., number of predictors randomly sampled for splitting at each node).</p>
+<p>Table 1 shows the resampling results across tuning parameters. The final model utilizes <em>mtry</em> value of 14, i.e., the number of predictors randomly selected for splitting at each tree node.</p>
 <table>
 <caption><em>Table 1.</em> Resampling results</caption>
 <thead>
@@ -146,123 +147,100 @@ rfFit &lt;-<span class="st"> </span><span class="kw">train</span>(classe ~<span 
 </tr>
 </tbody>
 </table>
-<p>The final model estimates an out-of-bag error rate of 0.59%. OOB error is estimated during the training by bootstrapping from the training set and it should provide an unbiased estimate of out-of-sample error<a href="#fn4" class="footnoteRef" id="fnref4"><sup>4</sup></a>. The class error rate ranged from &lt; 0.1% (class A) to ~1% (classes B, D).</p>
+<p>The best fitting model estimates an out-of-bag error rate of 0.59%. OOB error is estimated during the training by bootstrapping from the training set and it should provide an unbiased estimate of out-of-sample error<a href="#fn5" class="footnoteRef" id="fnref5"><sup>5</sup></a>.</p>
 </div>
 <div id="performance" class="section level2">
 <h2>Performance</h2>
-<p>The classification performance of the random forest model was used to predict the classes in the test set as follows:</p>
+<p>The classification performance of the fitted model was used to predict the classes in the test set as follows:</p>
 <pre class="sourceCode r"><code class="sourceCode r">rfPredict &lt;-<span class="st"> </span><span class="kw">predict</span>(rfFit, <span class="dt">newdata=</span>testing)
 rfPerformance &lt;-<span class="st"> </span><span class="kw">confusionMatrix</span>(rfPredict,testing$classe)</code></pre>
-<p>The overall accuracy of the model was 99.4% (κ = 0.99), which is contingent with the model’s estimated OOB error. Balanced accuracy ranged between 99.3% and 99.9% by class (Table 2).</p>
+<p>The overall accuracy of the model was 99.4% (κ = 0.99), which is contingent with the estimated OOB error (Table 2).</p>
 <table>
-<caption><em>Table 2.</em> Statistics by class</caption>
+<caption><em>Table 2.</em> Confusion matrix of predicted and observed classes</caption>
 <thead>
 <tr class="header">
 <th align="left"></th>
-<th align="right">Class: A</th>
-<th align="right">Class: B</th>
-<th align="right">Class: C</th>
-<th align="right">Class: D</th>
-<th align="right">Class: E</th>
+<th align="right">A</th>
+<th align="right">B</th>
+<th align="right">C</th>
+<th align="right">D</th>
+<th align="right">E</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">Sensitivity</td>
-<td align="right">1.000</td>
-<td align="right">0.996</td>
-<td align="right">0.988</td>
-<td align="right">0.991</td>
-<td align="right">0.993</td>
+<td align="left">A</td>
+<td align="right">1674</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">0</td>
 </tr>
 <tr class="even">
-<td align="left">Specificity</td>
-<td align="right">0.999</td>
-<td align="right">0.999</td>
-<td align="right">0.998</td>
-<td align="right">0.998</td>
-<td align="right">1.000</td>
+<td align="left">B</td>
+<td align="right">5</td>
+<td align="right">1134</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">0</td>
 </tr>
 <tr class="odd">
-<td align="left">Pos Pred Value</td>
-<td align="right">0.997</td>
-<td align="right">0.994</td>
-<td align="right">0.990</td>
-<td align="right">0.988</td>
-<td align="right">1.000</td>
+<td align="left">C</td>
+<td align="right">0</td>
+<td align="right">7</td>
+<td align="right">1014</td>
+<td align="right">5</td>
+<td align="right">0</td>
 </tr>
 <tr class="even">
-<td align="left">Neg Pred Value</td>
-<td align="right">1.000</td>
-<td align="right">0.999</td>
-<td align="right">0.998</td>
-<td align="right">0.998</td>
-<td align="right">0.998</td>
+<td align="left">D</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">9</td>
+<td align="right">955</td>
+<td align="right">0</td>
 </tr>
 <tr class="odd">
-<td align="left">Prevalence</td>
-<td align="right">0.284</td>
-<td align="right">0.194</td>
-<td align="right">0.174</td>
-<td align="right">0.164</td>
-<td align="right">0.184</td>
-</tr>
-<tr class="even">
-<td align="left">Detection Rate</td>
-<td align="right">0.284</td>
-<td align="right">0.193</td>
-<td align="right">0.172</td>
-<td align="right">0.162</td>
-<td align="right">0.182</td>
-</tr>
-<tr class="odd">
-<td align="left">Detection Prevalence</td>
-<td align="right">0.285</td>
-<td align="right">0.194</td>
-<td align="right">0.174</td>
-<td align="right">0.164</td>
-<td align="right">0.182</td>
-</tr>
-<tr class="even">
-<td align="left">Balanced Accuracy</td>
-<td align="right">0.999</td>
-<td align="right">0.997</td>
-<td align="right">0.993</td>
-<td align="right">0.994</td>
-<td align="right">0.996</td>
+<td align="left">E</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">7</td>
+<td align="right">1074</td>
 </tr>
 </tbody>
 </table>
 </div>
 <div id="model-comparison" class="section level2">
 <h2>Model comparison</h2>
-<p>For comparison purposes I also trained a support vector machine (SVM) classifier and a k-Nearest neighbor classifiers using the same training and test sets. My primary goals was to examine if comparable performance to random forests could be reached with a computationally less demanding models.</p>
-<p>Training and test sets were pre-processed (centered and scaled) prior to training in order to improve accuracy. I used the radial basis function kernel (RBF) model <strong>svmRadial</strong>, provided by <strong>kernlab</strong> (0.9-20) to train the SVM classifier and the <strong>knn</strong> model from <strong>e1071</strong> (1.6-4).</p>
-<p>Similarly to the random forest model, I used 10-fold cross-validation with 3 repeats to tune the SVM <em>cost</em> parameter (i.e., level of trade-off between training error and complexity of the model) and the k-NN <em>k</em> parameter (i.e., number of neighbors). The training time was approximately 40 minutes for the SVM model and 10 minutes for the k-NN model using the same multicore configuration as the random forest model.</p>
+<p>For comparison purposes, I also trained a support vector machine (SVM) model and a k-nearest neighbor model using the same training and test set split. My primary goal was to examine if comparable performance to random forests could be reached with computationally less demanding models.</p>
+<p>The training and test sets were pre-processed (centered and scaled) prior to model training. I used the radial basis function kernel (RBF) model <strong>svmRadial</strong>, provided by <strong>kernlab</strong> (0.9-20) to train the SVM model and the <strong>knn</strong> model from <strong>e1071</strong> (1.6-4).</p>
+<p>I used 10-fold cross-validation with 3 repeats to tune the SVM <em>cost</em> parameter (level of trade-off between training error and complexity of the model) and the <em>k</em> parameter (number of neighbors) for the kNN model. The training time was approximately 40 minutes for the SVM model and 10 minutes for the kNN model using the same multicore configuration as before. The same seed (400) was used each time to ensure that the resampling results would be comparable between the models. In both cases the best model was selected based on accuracy.</p>
 <pre class="sourceCode r"><code class="sourceCode r">svmFit &lt;-<span class="st"> </span><span class="kw">train</span>(classe ~<span class="st"> </span>.,<span class="dt">data=</span>training.processed,<span class="dt">method=</span><span class="st">&quot;svmRadial&quot;</span>,
                 <span class="dt">trControl=</span><span class="kw">trainControl</span>(<span class="dt">method=</span><span class="st">&quot;repeatedcv&quot;</span>,<span class="dt">number=</span><span class="dv">10</span>,<span class="dt">repeats=</span><span class="dv">3</span>),<span class="dt">tuneLength=</span><span class="dv">10</span>)
 knnFit &lt;-<span class="st"> </span><span class="kw">train</span>(classe ~.,<span class="dt">data=</span>training.processed,<span class="dt">method=</span><span class="st">&quot;knn&quot;</span>,
                 <span class="dt">trControl=</span><span class="kw">trainControl</span>(<span class="dt">method=</span><span class="st">&quot;repeatedcv&quot;</span>,<span class="dt">number=</span><span class="dv">10</span>,<span class="dt">repeats=</span><span class="dv">3</span>),<span class="dt">tuneLength=</span><span class="dv">10</span>)</code></pre>
-<p>The best SVM model uses 2999 support vectors and has a cost of 128, with a training error of 0.15%. The resampled overall accuracy is 99.2% (κ = 0.99). When predicted on the test set, the overall accuracy of the model was 99.3% (κ = 0.99), with balanced accuracy ranging between 98.8% and 99.9% by class.</p>
-<p>The best k-nearest neighbor model uses 5 neighbours. The resampled overall accuracy is 96.0% (κ = 0.95). When predicting on the test set, the overall accuracy was 96.4% (κ = 0.95). The balanced accuracy ranged from 96.9% to 98.5%.</p>
-<p>The models were compared using the <em>resamples</em> and <em>diff</em> functions, as per the caret documentation<a href="#fn5" class="footnoteRef" id="fnref5"><sup>5</sup></a>. The difference between SVM and random forest was not statistically significant, however k-nearest neighbour was worse than both.</p>
+<p>The best SVM model uses 2999 support vectors and has a cost of 128. The resampled overall accuracy is 99.2% (κ = 0.99). When predicted on the test set, the overall accuracy of the model was 99.3% (κ = 0.99).</p>
+<p>The best k-nearest neighbor model uses 5 neighbours. The resampled overall accuracy is 96.0% (κ = 0.95). When predicting on the test set, the overall accuracy was 96.4% (κ = 0.95).</p>
+<p>The three models were compared using the <em>resamples</em> and <em>diff</em> functions, as per the caret documentation<a href="#fn6" class="footnoteRef" id="fnref6"><sup>6</sup></a>. The difference between SVM and random forest was not statistically significant, however k-nearest neighbour was worse than both.</p>
 <pre class="sourceCode r"><code class="sourceCode r">resamps &lt;-<span class="st"> </span><span class="kw">resamples</span>(<span class="kw">list</span>(<span class="dt">KNN =</span> knnFit, <span class="dt">RF =</span> rfFit, <span class="dt">SVM =</span> svmFit))
 difs &lt;-<span class="st"> </span><span class="kw">diff</span>(resamps)</code></pre>
-<p>When predicting on the “unseen” data provided as the programming assignment problems, all of the classifiers worked as could be expected. Neither SVM or random forest produced any misclassifications while the k-nearest neighbor model predicted problem 3 incorrectly.</p>
+<p>When predicting on the “unseen” data provided as the programming assignment problems, all of the classifiers worked as one might expect based on the accuracy levels. The random forest and SVM models did not produce any incorrect predictions while the k-nearest neighbor model predicted one problem incorrectly.</p>
 </div>
 <div id="conclusion" class="section level2">
 <h2>Conclusion</h2>
-<p>All of the classifier models produce excellent classification results with little need for manual tuning. In practical terms, k-nearest neighbor is the fastest to compute seems less accurate than the others. SVM appears to be faster to compute than random forest even if the number of levels for the tuning parameter is increased. Compared to SVN, random forest may have advantages in support for automatic feature selection and robustness to predictor noise (Kuhn and Johnson, p. 550<a href="#fn6" class="footnoteRef" id="fnref6"><sup>6</sup></a>).</p>
+<p>All of the models that I experimented with produced excellent classification results with little need for manual tuning. In practical terms, k-nearest neighbors is the fastest to compute but seems slightly less accurate than the other models. SVM appears to be faster to compute than random forests even if the number of levels for the tuning parameter is increased. Compared to SVM, random forest may have advantages in support for automatic feature selection and robustness to predictor noise (Kuhn and Johnson, p. 550<a href="#fn7" class="footnoteRef" id="fnref7"><sup>7</sup></a>).</p>
 </div>
 <div class="footnotes">
 <hr />
 <ol>
 <li id="fn1"><p>Kuhn, M.: Building Predictive Models in R Using the caret package. Journal of Statistical Software 28(5), November 2008. <a href="http://www.jstatsoft.org/v28/i05/paper">http://www.jstatsoft.org/v28/i05/paper</a><a href="#fnref1">↩</a></p></li>
-<li id="fn2"><p>Fernández-Delgado, M., Cernadas, E., Barro, S., Amorim, D.: Do we Need Hundreds of Classifiers to Solve Real World Classification Problems? Journal of Machile Learning Research 15, October, 3133-3181 (2014). <a href="http://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf">http://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf</a><a href="#fnref2">↩</a></p></li>
-<li id="fn3"><p>Kuhn, M.: <a href="http://appliedpredictivemodeling.com/blog/2014/11/27/vpuig01pqbklmi72b8lcl3ij5hj2qm">Comparing Different Species of Cross-Validation</a><a href="#fnref3">↩</a></p></li>
-<li id="fn4"><p>Breiman, L., Cutler, A.: Random Forests. <a href="http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr">http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr</a><a href="#fnref4">↩</a></p></li>
-<li id="fn5"><p><a href="http://topepo.github.io/caret/training.html">http://topepo.github.io/caret/training.html</a><a href="#fnref5">↩</a></p></li>
-<li id="fn6"><p>Kuhn, M., Johnson, K.: Applied Predictive Modeling. Springer, New York (2013)<a href="#fnref6">↩</a></p></li>
+<li id="fn2"><p>Strobl, C., Boulesteix, A.-L., Kneib, T., Augustin, T., Zeileis, A.: Conditional variable importance for random forests. BMC Bioinformatics 9, 307 (2008). <a href="http://dx.doi.org/10.1186%2F1471-2105-9-307"><a href="http://dx.doi.org/10.1186%2F1471-2105-9-307">http://dx.doi.org/10.1186%2F1471-2105-9-307</a></a><a href="#fnref2">↩</a></p></li>
+<li id="fn3"><p>Fernández-Delgado, M., Cernadas, E., Barro, S., Amorim, D.: Do we Need Hundreds of Classifiers to Solve Real World Classification Problems? Journal of Machile Learning Research 15, October, 3133-3181 (2014). <a href="http://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf">http://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf</a><a href="#fnref3">↩</a></p></li>
+<li id="fn4"><p>Kuhn, M.: <a href="http://appliedpredictivemodeling.com/blog/2014/11/27/vpuig01pqbklmi72b8lcl3ij5hj2qm">Comparing Different Species of Cross-Validation</a><a href="#fnref4">↩</a></p></li>
+<li id="fn5"><p>Breiman, L., Cutler, A.: Random Forests. <a href="http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr">http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr</a><a href="#fnref5">↩</a></p></li>
+<li id="fn6"><p>The caret Package: Model Training and Tuning. <a href="http://topepo.github.io/caret/training.html"><a href="http://topepo.github.io/caret/training.html">http://topepo.github.io/caret/training.html</a></a><a href="#fnref6">↩</a></p></li>
+<li id="fn7"><p>Kuhn, M., Johnson, K.: Applied Predictive Modeling. Springer, New York (2013) <a href="http://appliedpredictivemodeling.com/"><a href="http://appliedpredictivemodeling.com/">http://appliedpredictivemodeling.com/</a></a><a href="#fnref7">↩</a></p></li>
 </ol>
 </div>
 
