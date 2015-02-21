@@ -8,7 +8,6 @@ vignette: >
   \usepackage[utf8]{inputenc}
 ---
 ```{r echo=FALSE,warning=FALSE}
-setwd("/Users/tomi/Opiskelu/Kurssit/MOOC/Coursera - Practical Machine Learning/")
 load("pml.Rda")
 library(printr)
 
